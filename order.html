@@ -1,0 +1,149 @@
+
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 12px sans-serif;
+}
+
+</style>
+<body>
+
+<script src="lib/d3.v3.min.js"></script>
+<script src="lib/queue.v1.min.js"></script>
+<script src="lib/sankey.js"></script>
+
+<script>
+
+// ========================== Private variables ==========================
+
+var margin = {top: 20, right: 20, bottom: 30, left: 60},
+    width = 1200 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+var parseDate = d3.time.format("%Y");
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var sankey = d3.sankey()
+    .nodeWidth(15)
+    .nodePadding(10)
+    .size([width, height]);
+
+var path = sankey.link();
+
+// ========================== Prepare data ==========================
+
+queue()
+    .defer(d3.csv, "./data/grains.csv")
+    .await(ready);
+
+// ========================== Start viz ==========================
+
+function ready(error, csv_data) {
+
+// todo: draw over 'path' and resize the ribbons based on value
+// todo: show areas where there is zero data
+
+  graph = {"nodes": [], "links": []};
+
+  nodes = {};
+  edges = [];
+  nodesArray = [];
+
+  // Scales
+  yearScale = d3.scale.linear().domain([1640,1688]).range([20,width -20]);
+  radiusScale = d3.scale.linear().domain([0,200]).range([2,12]).clamp(true);
+  chargeScale = d3.scale.linear().domain([0,100]).range([0,-100]).clamp(true);
+  uniqueValues = d3.set(nodesArray.map(function(d) {return d.name})).values();
+  colorScale = d3.scale.category20(uniqueValues);
+  sortScale = d3.scale.ordinal().domain(uniqueValues).rangePoints([-0.001,.001]);
+  lineScale = d3.scale.linear().domain([0,300]).range([2,15]).clamp(true)
+
+  // Create a JSON link array
+  csv_data.forEach(function(link) {
+      key = link.translation + '-' + link.date;
+      link.source = nodes[key] || (nodes[key] = {name: link.translation, date: link.date, origX: yearScale(parseInt(link.date)), value: link.value || 0});
+  });
+
+
+  // Push the formatted notes to the nodes array
+  graph.nodes.push(nodes);
+
+  // console.log(nodes);
+  // console.log(edges);
+  // console.log(graph);
+
+// Build the edges array
+var y = "→";
+  for (x in nodes) {
+    nodesArray.push(nodes[x])
+    if(nodes[y]) {
+      if (nodes[y].name == nodes[x].name) {
+        var newLink = {source:nodes[y], target:nodes[x]}
+        edges.push(newLink);
+      }
+    }
+    y = x;
+  }
+
+// Begin the force layout
+force = d3.layout.force = d3.layout.force()
+    .nodes(nodesArray)
+    .links(edges)
+    .size([width, height])
+    .charge(function(d) {return chargeScale(d.value)})
+    .chargeDistance(100)
+    .linkDistance(10)
+    .linkStrength(2)
+    .gravity(.1)
+    .on("tick", tick);
+
+    // Style the circles
+    d3.select("svg").selectAll("circle")
+      .data(nodesArray)
+    .enter()
+      .append("circle")
+      .style("fill", function (d) {return colorScale(d.name)})
+      .attr("r", function(d) {return radiusScale(d.value)})
+      .attr("cx", function (d) {return d.x})
+      .attr("cy", function (d) {return d.y});
+
+    // Style the edges
+    d3.select("svg").selectAll("line")
+      .data(edges)
+    .enter()
+      .append("line")
+      .style("stroke", function (d) {return colorScale(d.source.name)})
+      .style("stroke-width", function(d) {return lineScale(d.source.value) });
+
+    force.start();
+
+    // ========================== Functions ==========================
+
+    function tick() {
+
+      d3.selectAll("circle").each(function (d) {
+        d.x = d.origX;
+        d.px = d.origX;
+        // d.y = (sortScale(d.name) + 1 ) * d.y;
+        // d.py = d.y;
+        d3.select(this)
+          .attr("cx", function (p) {return p.x})
+          .attr("cy", function (p) {return p.y});
+      })
+
+      d3.selectAll("line")
+        .attr("x1", function (d) {return d.source.x})
+        .attr("x2", function (d) {return d.target.x})
+        .attr("y1", function (d) {return d.source.y})
+        .attr("y2", function (d) {return d.target.y});
+    }
+
+}
+</script>
