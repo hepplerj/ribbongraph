@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <meta charset="utf-8">
-<title>Sankey Diagram</title>
+<title>Foodstuffs</title>
 <style>
 
 body {
@@ -14,7 +14,6 @@ body {
 }
 
 .node rect {
-  cursor: move;
   fill-opacity: .9;
   shape-rendering: crispedgesArray;
 }
@@ -34,10 +33,18 @@ body {
   stroke-opacity: .5;
 }
 
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
 </style>
+
 <body>
 
-<h2>Sankey</h2>
+<h2>Foodstuffs | Grains</h2>
 
 <p id="chart">
 
@@ -47,12 +54,11 @@ body {
 
 <script>
 
-var margin = {top: 1, right: 1, bottom: 6, left: 1},
-    width = 1300 - margin.left - margin.right,
-    height = 1300 - margin.top - margin.bottom;
+var margin = {top: 20, right: 30, bottom: 10, left: 20},
+    width = 1200 - margin.left - margin.right,
+    height = 600 - margin.top - margin.bottom;
 
 var formatNumber = d3.format(",.0f"),
-    // format = function(d) { return formatNumber(d) + " TWh"; },
     color = d3.scale.category20();
 
 var svg = d3.select("#chart").append("svg")
@@ -61,12 +67,13 @@ var svg = d3.select("#chart").append("svg")
   .append("g")
     .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-var sankey = d3.sankey();
-    // .nodeWidth(15)
-    // .nodePadding(10)
-    // .size([width, height]);
+var sankey = d3.sankey()
+    .nodeWidth(5)
+    .nodePadding(10)
+    .size([width, height]);
 
 var path = sankey.link();
+
 
 // ========================== Prepare data ==========================
 
@@ -74,17 +81,34 @@ queue()
     .defer(d3.csv, "data/grains.csv")
     .await(ready);
 
-
 // ========================== Start viz ==========================
 
 function ready(error, csv_data) {
 
-  // graph = {"nodes": [], "links": []};
+  // Scales
+  var scaleX = d3.time.scale()
+    .domain([new Date(csv_data[0].date), d3.time.year.offset(new Date(csv_data[csv_data.length - 1].date), 1)])
+    .rangeRound([0, width + margin.left + margin.right]);
+
+  var x_axis = d3.svg.axis()
+    .scale(scaleX)
+    .orient("bottom")
+    .ticks(d3.time.years, 5)
+    .tickFormat(d3.time.format('%Y'))
+    .tickSize(5);
+    // .tickPadding(8);
+
+
+  svg.append("g")
+    .attr("class", "x axis")
+    .attr('transform', 'translate(0, ' + (height - 10) + ')')
+    .call(x_axis);
 
   nodes = [];
   edgesArray = [];
   nodesArray = [];
 
+  // Untyped data, let's fix that.
   csv_data.forEach(function (d, i) {
     d.index = i;
     d.value = +d.value;
@@ -103,8 +127,8 @@ function ready(error, csv_data) {
   // For example, nodes are rendered as "peas-1640," "peas-1641," etc.
   csv_data.forEach(function(link) {
       key = link.translation + '-' + link.date;
-      link.source = nodes[key] || (nodes[key] = {translation: link.translation, date: link.date, origX: yearScale(parseInt(link.date)), value: link.value || 0});
-      nodes.push(link);
+      link.source = nodes[key] || (nodes[key] = {translation: link.translation, date: link.date, origX: yearScale(parseInt(link.date)), value: link.value });
+      // nodes.push(link);
   });
 
 // Build the edgesArray array
@@ -124,78 +148,70 @@ var y = "→";
     y = x;
   }
 
-   console.log(nodesArray);
-   console.log(edgesArray);
-  // console.log(graph);
-
-  // Build the graph
-  // graph.nodes.push(nodesArray);
-  // graph.links.push(edgesArray);
+   // console.log(nodesArray);
+   // console.log(edgesArray);
 
   sankey
-      .nodeWidth(5)
-      .nodePadding(3)
-      .size([width, height])
-      .nodes(nodesArray)//.filter(function(d,i) {return d.date < 1650}))
-      .links(edgesArray)//.filter(function(d,i) { return i < 50 && d.source.date < 1650 &&  d.target.date < 1650} )) // filtering to test a smaller data set
-      .layout(32);
+    .nodes(nodesArray)
+    .links(edgesArray)
+    .layout(32);
 
 
-  // // Sort the nodes by value
-  // d3.values(nodesArray).forEach(function (d) {
-  //   var y = ( height() - d3.sum(d, function(n) { return n.dy+sankey.nodePadding(); }) ) / 2 + sankey.nodePadding()/2;
+  // Sort the nodes by value
+  // d3.values(nodesArray).forEach(function(d) {
   //   d.sort(function (a,b) {
   //     return b.dy - a.dy;
   //   })
   // });
 
   var link = svg.append("g").selectAll(".link")
-     // .data(edgesArray)
-      .data(edgesArray)//.filter(function(d,i) { return i < 50 && d.source.date < 1650 &&  d.target.date < 1650} )) // filtering to test a smaller data set
+      .data(edgesArray)
     .enter().append("path")
       .attr("class", "link")
       .attr("d", path)
-      .style("stroke-width", function(d) { return Math.max(1, d.y); })
-      .sort(function(a, b) { return b.y - a.y; });
+      .style("stroke-width", function(d) { return Math.max(1, d.dy); })
+      .style("display", function(d) { return d.value == ".25" ? "none" : "block" })
+      .sort(function(a, b) { return b.dy - a.dy; });
 
   link.append("title")
-      .text(function(d) { return d.source.translation + " → " + d.target.translation + "\n" + d.value; });
+      .text(function(d) { return d.source.translation + " → " + d.target.translation + "\n"+ "Amount: " + d.value + "\n" + "Year: " + d.date; });
 
   var node = svg.append("g").selectAll(".node")
-//      .data(nodesArray)
-      .data(nodesArray)//.filter(function(d,i) { return d.date < 1650}))  // filtering to test a smaller data set
+      .data(nodesArray)
     .enter().append("g")
       .attr("class", "node")
       .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
-    .call(d3.behavior.drag()
-      .origin(function(d) { return d; })
-      .on("dragstart", function() { this.parentNode.appendChild(this); })
-      .on("drag", dragmove));
+      .style("display", function(d) { return d.value == ".25" ? "none" : "block" })
+
+    // .call(d3.behavior.drag()
+    //   .origin(function(d) { return d; })
+    //   .on("dragstart", function() { this.parentNode.appendChild(this); })
+    //   .on("drag", dragmove));
 
   node.append("rect")
-      .attr("height", function(d) { return d.y; })
+      .attr("height", function(d) { return d.dy; })
       .attr("width", sankey.nodeWidth())
       .style("fill", function(d) { return d.color = color(d.translation.replace(/ .*/, "")); })
       .style("stroke", function(d) { return d3.rgb(d.color).darker(2); })
     .append("title")
       .text(function(d) { return d.translation + "\n" + d.value; });
 
-  node.append("text")
-      .attr("x", -6)
-      .attr("y", function(d) { return d.y / 2; })
-      .attr("dy", ".35em")
-      .attr("text-anchor", "end")
-      .attr("transform", null)
-      .text(function(d) { return d.translation; })
-    .filter(function(d) { return d.x < width / 2; })
-      .attr("x", 6 + sankey.nodeWidth())
-      .attr("text-anchor", "start");
+  // node.append("text")
+  //     .attr("x", -6)
+  //     .attr("y", function(d) { return d.y / 2; })
+  //     .attr("dy", ".35em")
+  //     .attr("text-anchor", "end")
+  //     .attr("transform", null)
+  //     .text(function(d) { return d.translation; })
+  //   .filter(function(d) { return d.x < width / 2; })
+  //     .attr("x", 6 + sankey.nodeWidth())
+  //     .attr("text-anchor", "start");
 
-  function dragmove(d) {
-    d3.select(this).attr("transform", "translate(" + d.x + "," + (d.y = Math.max(0, Math.min(height - d.y, d3.event.y))) + ")");
-    sankey.relayout();
-    link.attr("d", path);
-  }
+  // function dragmove(d) {
+  //   d3.select(this).attr("transform", "translate(" + d.x + "," + (d.y = Math.max(0, Math.min(height - d.y, d3.event.y))) + ")");
+  //   sankey.relayout();
+  //   link.attr("d", path);
+  // }
 };
 
 </script>
